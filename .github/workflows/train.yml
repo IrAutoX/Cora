@@ -1,45 +1,59 @@
 name: Cora AI Training
+
 on:
   workflow_dispatch:
+    inputs:
+      minutes:
+        description: Training duration in minutes
+        required: true
+        default: "60"
+      max_length:
+        description: Maximum token length
+        required: true
+        default: "512"
   push:
     branches: [main]
+
 permissions:
   contents: write
+
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install PyTorch
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Train Cora for 2 minutes
-        run: python train.py --minutes 2
-      - name: Report metrics
+      - name: Train Cora
+        run: python train.py --minutes ${{ inputs.minutes || '60' }} --max-length ${{ inputs.max_length || '512' }}
+      - name: Print metrics
         run: cat checkpoints/metrics.json
-      - name: Package checkpoint
+      - name: Package model
         run: |
-          tar -czf cora-model-${{ github.run_number }}.tar.gz checkpoints/cora-latest.pt checkpoints/metrics.json data/fa.txt
+          tar -czf cora-model-${{ github.run_number }}.tar.gz checkpoints/cora-final checkpoints/cora-latest checkpoints/cora-2m checkpoints/metrics.json data/fa.txt
           sha256sum cora-model-${{ github.run_number }}.tar.gz | tee cora-model-${{ github.run_number }}.sha256
-      - name: Upload checkpoint
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cora-checkpoint-${{ github.run_number }}
+          name: cora-model-${{ github.run_number }}
           path: |
-            checkpoints/cora-latest.pt
+            checkpoints/cora-final
+            checkpoints/cora-latest
+            checkpoints/cora-2m
             checkpoints/metrics.json
             cora-model-${{ github.run_number }}.tar.gz
             cora-model-${{ github.run_number }}.sha256
-      - name: Release model
+      - name: Release trained model
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: cora-v0.1.${{ github.run_number }}
-          name: Cora AI v0.1.${{ github.run_number }}
+          tag_name: cora-v0.2.${{ github.run_number }}
+          name: Cora AI v0.2.${{ github.run_number }}
           generate_release_notes: true
           body_path: checkpoints/metrics.json
           files: |
